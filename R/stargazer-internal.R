@@ -58,10 +58,12 @@ function(libname, pkgname) {
   	  .global.adj.R2 <<- append(.global.adj.R2, .adj.r.squared(object.name))
   	  .global.AIC <<- append(.global.AIC, .AIC(object.name))
       .global.BIC <<- append(.global.BIC, .BIC(object.name))
+      .global.skewness <<- append(.global.skewness, .skewness(object.name))
+      .global.kurtosis <<- append(.global.kurtosis, .kurtosis(object.name))
   	  .global.scale <<- append(.global.scale, .get.scale(object.name))
       .global.UBRE <<- append(.global.UBRE, .gcv.UBRE(object.name))
   	  .global.sigma2 <<- append(.global.sigma2, .get.sigma2(object.name))
-  	  
+  	  .global.sumcoef <<- cbind(.global.sumcoef, .sumcoef(object.name))
       
       .global.rho <<- cbind(.global.rho, .get.rho(object.name))
       .global.mills <<- cbind(.global.mills, .get.mills(object.name))
@@ -69,6 +71,9 @@ function(libname, pkgname) {
   	  .global.SER <<- cbind(.global.SER, .SER(object.name))
   	  .global.F.stat <<- cbind(.global.F.stat, .F.stat(object.name))
   	  .global.chi.stat <<- cbind(.global.chi.stat, .chi.stat(object.name))
+  	  .global.JB.stat <<- cbind(.global.JB.stat, .JB.stat(object.name))
+  	  .global.LB.stat <<- cbind(.global.LB.stat, .LB.stat(object.name))
+  	  .global.LMARCH.stat <<- cbind(.global.LMARCH.stat, .LMARCH.stat(object.name))
   	  .global.wald.stat <<- cbind(.global.wald.stat, .wald.stat(object.name))
   	  .global.lr.stat <<- cbind(.global.lr.stat, .lr.stat(object.name))
   	  .global.logrank.stat <<- cbind(.global.logrank.stat, .logrank.stat(object.name))
@@ -495,7 +500,7 @@ function(libname, pkgname) {
     }
   
     else if (style=="default") {
-      .format.table.parts <<- c("=!","dependent variable label","dependent variables","models","columns","numbers","objects","-","coefficients","-","omit","-","additional","N","R-squared","adjusted R-squared","max R-squared","log likelihood","sigma2","theta(se)*", "AIC","BIC","UBRE","rho(se)*","Mills(se)*", "SER(df)","F statistic(df)*","chi2(df)*","Wald(df)*","LR(df)*","logrank(df)*","=!","notes")
+      .format.table.parts <<- c("=!","dependent variable label","dependent variables","models","columns","numbers","objects","-","coefficients","-","omit","-","additional","N","R-squared","adjusted R-squared","max R-squared","log likelihood","sigma2","theta(se)*", "AIC","BIC","UBRE","rho(se)*","Mills(se)*", "SER(df)","F statistic(df)*","chi2(df)*","Jarque-Bera(p)","Ljung-Box(p)","LM ARCH(df)(p)","sumcoef","Wald(df)*","LR(df)*","logrank(df)*","=!","notes")
     }
   }
   
@@ -559,7 +564,7 @@ function(libname, pkgname) {
       model.name <- .get.model.name(object.name)
       
       if (model.name %in% c("coeftest","maBina","Arima")) {
-        return(NA)
+        return(as.vector(BIC(object.name)))
       }
       
       if (model.name %in% c("censReg")) {
@@ -587,6 +592,142 @@ function(libname, pkgname) {
       return(NA)
     }
   
+  .sumcoef <-
+      function(object.name) {
+          .sumcoef.output <- as.vector(rep(NA,times=2))
+
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              .sumcoef.output <- as.vector(c(sum(object.name$coef[grepl("ar", names(object.name$coef))]),NA))
+          }
+
+          if (model.name %in% c("fGARCH")) {
+              .sumcoef.output <- as.vector(c(sum(object.name@fit$par[grepl("ar", names(object.name@fit$par))]),
+                                            sum(object.name@fit$par[grepl("alpha", names(object.name@fit$par)) | grepl("beta", names(object.name@fit$par))])
+              ))
+          }
+
+          names(.sumcoef.output) <- c("mean eq","volatility eq")
+          return(cbind(.sumcoef.output))
+      }
+
+  .skewness <-
+      function(object.name) {
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              r.s <- object.name$residuals/sqrt(object.name$sigma2)
+              return(as.vector(skewness(r.s)))
+          }
+          if (model.name %in% c("fGARCH")) {
+              r.s <- object.name@residuals/object.name@sigma.t
+              return(as.vector(skewness(r.s)))
+          }
+
+          return(NA)
+      }
+
+  .kurtosis <-
+      function(object.name) {
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              r.s <- object.name$residuals/sqrt(object.name$sigma2)
+              return(as.vector(kurtosis(r.s)))
+          }
+          if (model.name %in% c("fGARCH")) {
+              r.s <- object.name@residuals/object.name@sigma.t
+              return(as.vector(kurtosis(r.s)))
+          }
+
+          return(NA)
+      }
+
+  .JB.stat <-
+      function(object.name) {
+          JB.stat.output <- as.vector(rep(NA,times=3))
+          r.s <- NULL
+
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              r.s <- object.name$residuals/sqrt(object.name$sigma2)
+          }
+
+          if (model.name %in% c("fGARCH")) {
+              r.s <- object.name@residuals/object.name@sigma.t
+          }
+
+          if (!is.null(r.s)) {
+              JBt <- jarqueberaTest(r.s)@test
+              JB.stat.output <- as.vector(c(JBt$statistic,2,JBt$p.value))
+          }
+
+          names(JB.stat.output) <- c("statistic","df1","p-value")
+          return(cbind(JB.stat.output))
+      }
+
+  .LB.stat <-
+      function(object.name) {
+          LB.stat.output <- as.vector(rep(NA,times=18))
+
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima","fGARCH")) {
+
+              if (model.name %in% c("arima","Arima")) {
+                  r.s <- object.name$residuals/sqrt(object.name$sigma2)
+              }
+              if (model.name %in% c("fGARCH")) {
+                  r.s <- object.name@residuals/object.name@sigma.t
+              }
+
+              bt10 = Box.test(r.s, lag = 10, type = "Ljung-Box")
+              bt15 = Box.test(r.s, lag = 15, type = "Ljung-Box")
+              bt20 = Box.test(r.s, lag = 20, type = "Ljung-Box")
+              LB.stat.output[1:9] <- as.vector(c(bt10$statistic, bt10$parameter, bt10$p.value,
+                                                 bt15$statistic, bt15$parameter, bt15$p.value,
+                                                 bt20$statistic, bt20$parameter, bt20$p.value))
+              bt10 = Box.test(r.s^2, lag = 10, type = "Ljung-Box")
+              bt15 = Box.test(r.s^2, lag = 15, type = "Ljung-Box")
+              bt20 = Box.test(r.s^2, lag = 20, type = "Ljung-Box")
+              LB.stat.output[10:18] <- as.vector(c(bt10$statistic, bt10$parameter, bt10$p.value,
+                                                   bt15$statistic, bt15$parameter, bt15$p.value,
+                                                   bt20$statistic, bt20$parameter, bt20$p.value))
+          }
+
+          names(LB.stat.output) <- rep(c("statistic","df1","p-value"), 6)
+          return(cbind(LB.stat.output))
+      }
+
+  .LMARCH.stat <-
+      function(object.name) {
+          LMARCH.stat.output <- as.vector(rep(NA,times=3))
+          r.s <- NULL
+
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              r.s <- object.name$residuals/sqrt(object.name$sigma2)
+          }
+          if (model.name %in% c("fGARCH")) {
+              r.s <- object.name@residuals/object.name@sigma.t
+          }
+
+          if (!is.null(r.s)) {
+              r.sq <- as.vector(na.exclude(r.s^2))
+              n <- length(r.sq)
+              n.lags <- 12
+              x.mat <- embed(r.sq, n.lags+1)
+              arch.ols <- summary(lm(x.mat[, 1] ~ x.mat[, -1]))
+              LMARCH.stat <- (n-n.lags) * arch.ols$r.squared
+              LMARCH.stat.output <- as.vector(c(LMARCH.stat, n.lags, 1-pchisq(LMARCH.stat, n.lags)))
+          }
+
+          names(LMARCH.stat.output) <- c("statistic","df1","p-value")
+          return(cbind(LMARCH.stat.output))
+      }
 
   .chi.stat <-
   function(object.name) {
@@ -2657,16 +2798,22 @@ function(libname, pkgname) {
     .global.adj.R2 <<- NULL
     .global.AIC <<- NULL
     .global.BIC <<- NULL
+    .global.skewness <<- NULL
+    .global.kurtosis <<- NULL
     .global.scale <<- NULL
     .global.UBRE <<- NULL
     .global.sigma2 <<- NULL
     .global.theta <<- NULL
     .global.rho <<- NULL
     .global.mills <<- NULL
+    .global.sumcoef <<- NULL
     
     .global.SER <<- NULL
     .global.F.stat <<- NULL
     .global.chi.stat <<- NULL
+    .global.JB.stat <<- NULL
+    .global.LB.stat <<- NULL
+    .global.LMARCH.stat <<- NULL
     .global.wald.stat <<- NULL
     .global.lr.stat <<- NULL
     .global.logrank.stat <<- NULL
@@ -2709,9 +2856,12 @@ function(libname, pkgname) {
   	  .global.adj.R2 <<- c(.global.adj.R2, suppressMessages(.adj.r.squared(object.name)))
   	  .global.AIC <<- c(.global.AIC, suppressMessages(.AIC(object.name)))
       .global.BIC <<- c(.global.BIC, suppressMessages(.BIC(object.name)))
+      .global.skewness <<- c(.global.skewness, suppressMessages(.skewness(object.name)))
+      .global.kurtosis <<- c(.global.kurtosis, suppressMessages(.kurtosis(object.name)))
       .global.scale <<- c(.global.scale, suppressMessages(.get.scale(object.name)))
       .global.UBRE <<- c(.global.UBRE, suppressMessages(.gcv.UBRE(object.name)))
   	  .global.sigma2 <<- c(.global.sigma2, suppressMessages(.get.sigma2(object.name)))
+  	  .global.sumcoef <<- cbind(suppressMessages(.sumcoef(object.name)))
       
       .global.rho <<- cbind(suppressMessages(.get.rho(object.name)))
       .global.mills <<- cbind(suppressMessages(.get.mills(object.name)))
@@ -2719,6 +2869,9 @@ function(libname, pkgname) {
   	  .global.SER <<- cbind(suppressMessages(.SER(object.name)))
   	  .global.F.stat <<- cbind(suppressMessages(.F.stat(object.name)))
       .global.chi.stat <<- cbind(suppressMessages(.chi.stat(object.name)))
+      .global.JB.stat <<- cbind(suppressMessages(.JB.stat(object.name)))
+      .global.LB.stat <<- cbind(suppressMessages(.LB.stat(object.name)))
+      .global.LMARCH.stat <<- cbind(suppressMessages(.LMARCH.stat(object.name)))
   	  .global.wald.stat <<- cbind(suppressMessages(.wald.stat(object.name)))
   	  .global.lr.stat <<- cbind(suppressMessages(.lr.stat(object.name)))
   	  .global.logrank.stat <<- cbind(suppressMessages(.logrank.stat(object.name)))
@@ -3593,6 +3746,28 @@ function(libname, pkgname) {
   	# residual deviance
   	else if (substr(part,1,nchar("residual deviance"))=="residual deviance") { .print.table.statistic(.global.var.name=.global.residual.deviance, .format.var.name=.format.residual.deviance, part.string=part, part.number=which.part.number) }
 
+  	# Jarque-Bera Normality Test
+  	else if (substr(part,1,nchar("Jarque-Bera"))=="Jarque-Bera") {
+  	    .print.table.statistic(.global.var.name=.global.skewness, .format.var.name=.format.skewness, part.number=which.part.number)
+  	    .print.table.statistic(.global.var.name=.global.kurtosis, .format.var.name=.format.kurtosis, part.number=which.part.number)
+  	    .print.table.statistic(.global.var.name=.global.JB.stat, .format.var.name=.format.JB.stat, part.string=part, part.number=which.part.number)
+  	}
+  	# Ljung-Box Q statistic
+  	else if (substr(part,1,nchar("Ljung-Box"))=="Ljung-Box") {
+  	    for (im in c(1,3,4,6)) {
+  	        tmp.name <- paste(.format.LB.stat," Q(",min(.global.LB.stat[((im-1)*3+1)+1,],na.rm=TRUE),") resid",rep(" sq.",(im-1) %/% 3),"", sep="")
+  	        .print.table.statistic(.global.var.name=.global.LB.stat[((im-1)*3+1):(im*3),], .format.var.name=tmp.name, part.string=part, part.number=which.part.number)
+  	        }
+  	}
+  	# LM ARCH Test
+  	else if (substr(part,1,nchar("LM ARCH"))=="LM ARCH") {
+  	    .print.table.statistic(.global.var.name=.global.LMARCH.stat, .format.var.name=.format.LMARCH.stat, part.string=part, part.number=which.part.number)
+  	}
+
+  	# sum of AR coefficients, sum of ARCH+GARCH coefficients
+  	else if (part=="sumcoef") {
+  	    for (im in 1:2) { .print.table.statistic(.global.var.name=.global.sumcoef[im,], .format.var.name=.format.sumcoef[im], part.string=part, part.number=which.part.number) }
+  	}
   	##
 
   	# single horizontal line, no matter what
@@ -6362,11 +6537,14 @@ function(libname, pkgname) {
     .global.adj.R2 <- NULL
     .global.AIC <- NULL
     .global.BIC <- NULL
+    .global.skewness <- NULL
+    .global.kurtosis <- NULL
     .global.scale <- NULL   # estimated scale parameter (gee)
     .global.UBRE <- NULL    # UBRE score (GAM)
     .global.sigma2 <- NULL  # sigma2 from arima
     .global.theta <- NULL   # theta from negative binomial
     .global.rho <- NULL
+    .global.sumcoef <- NULL
   
     .global.sel.equation <- NULL # selection equation, as opposed to default outcome equation, in heckit and 
     .global.zero.component <- NULL # zero, as opposed to count, component in hurdle and zeroinfl
@@ -6375,6 +6553,9 @@ function(libname, pkgname) {
     .global.SER <- NULL   # residual standard error; standard error of the regression
     .global.F.stat <- NULL # F-statistic for the regression
     .global.chi.stat <- NULL  # chi-squared statistic
+    .global.JB.stat <- NULL  # Jarque-Bera
+    .global.LB.stat <- NULL  # Ljung-Box Q statistic
+    .global.LMARCH.stat <- NULL  # LM ARCH statistic
     .global.wald.stat <- NULL # Wald test statistic (for coxph)
     .global.lr.stat <- NULL  # LR test statistic (for coxph)
     .global.logrank.stat <- NULL # Score (logrank) test (for coxph)
@@ -6544,12 +6725,18 @@ function(libname, pkgname) {
     .format.mills <- "Inverse Mills Ratio"
     .format.AIC <- "Akaike Inf. Crit."
     .format.BIC <- "Bayesian Inf. Crit."
+    .format.skewness <- "skewness"
+    .format.kurtosis <- "excess kurtosis"
     .format.sigma2 <- "$\\sigma^{2}$"
     .format.theta <- "$\\theta$"
+    .format.sumcoef <- c("$\\Sigma \\phi^{}_{i} $","$ \\Sigma (\\alpha^{}_{i}+\\beta^{}_{i})$")
     
     .format.SER <- "Residual Std. Error"
     .format.F.stat <- "F Statistic"
     .format.chi.stat <- "$\\chi^{2}$"
+    .format.JB.stat <- "Jarque-Bera"
+    .format.LB.stat <- ""
+    .format.LMARCH.stat <- "LM ARCH"
     .format.wald.stat <- "Wald Test"
     .format.lr.stat <- "LR Test"
     .format.logrank.stat <- "Score (Logrank) Test"
