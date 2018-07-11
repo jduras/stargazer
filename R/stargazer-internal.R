@@ -79,7 +79,7 @@ function(libname, pkgname) {
 
   	  # add RHS variables and coefficients
   	  coef.var <- .coefficient.variables(object.name)
-  	  .global.coef.vars.by.model <<-  cbind(.global.coef.vars.by.model, coef.var)
+  	  .global.coef.vars.by.model <<-  c(.global.coef.vars.by.model, list(coef.var))
 
   	  temp.gcv <- rep(NA,each=1,times=max.length)
 
@@ -2681,7 +2681,7 @@ function(libname, pkgname) {
   	  .global.dependent.variables.written <<- c(.global.dependent.variables.written, suppressMessages(.dependent.variable.written(object.name, model.num)))
       .global.coefficient.variables <<- suppressMessages(.coefficient.variables(object.name))
       
-      .global.coef.vars.by.model <<-  suppressMessages(cbind(.global.coef.vars.by.model, .global.coefficient.variables))
+      .global.coef.vars.by.model <<-  suppressMessages(c(.global.coef.vars.by.model, list(.global.coefficient.variables)))
       
       get.coef <- suppressMessages(.get.coefficients(object.name, user.coef, model.num=model.num))
       get.se <- suppressMessages(.get.standard.errors(object.name, user.se, model.num=model.num))
@@ -3506,8 +3506,8 @@ function(libname, pkgname) {
   		  .format.omit.table <<- matrix(.format.omit.no, nrow=length(.format.omit.regexp), ncol=length(.global.models)) 
   		  for (i in seq(1:length(.global.models))) {
   				for (j in seq(1:length(.format.omit.regexp))) {
-  					for (k in seq(1:length(.global.coef.vars.by.model[,i]))) {
-  					  relevant.coef.var <- .global.coef.vars.by.model[k,i]
+  					for (k in seq(1:length(.global.coef.vars.by.model[[i]]))) {
+  					  relevant.coef.var <- .global.coef.vars.by.model[[i]][k]
   					  if (length(grep(.format.omit.regexp[j], relevant.coef.var, perl=.format.perl, fixed=FALSE))!=0) {
   						   .format.omit.table[j,i] <<- .format.omit.yes
   						}
