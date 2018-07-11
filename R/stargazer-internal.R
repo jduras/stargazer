@@ -26,7 +26,7 @@ function(libname, pkgname) {
     if (class(object.name)[1] == "Glm") {
         .summary.object <<- summary.glm(object.name)
     }
-    else if (!(.model.identify(object.name) %in% c("aftreg", "coxreg","phreg","weibreg", "Glm", "bj", "cph", "lrm", "ols", "psm", "Rq"))) {
+    else if (!(.model.identify(object.name) %in% c("aftreg", "coxreg","phreg","weibreg", "Glm", "bj", "cph", "lrm", "ols", "psm", "Rq", "arima", "Arima", "ARIMA", "fGarch", "fGARCH", "uGARCHfit"))) {
       .summary.object <<- summary(object.name)
     }
     else {
@@ -58,10 +58,12 @@ function(libname, pkgname) {
   	  .global.adj.R2 <<- append(.global.adj.R2, .adj.r.squared(object.name))
   	  .global.AIC <<- append(.global.AIC, .AIC(object.name))
       .global.BIC <<- append(.global.BIC, .BIC(object.name))
+      .global.skewness <<- append(.global.skewness, .skewness(object.name))
+      .global.kurtosis <<- append(.global.kurtosis, .kurtosis(object.name))
   	  .global.scale <<- append(.global.scale, .get.scale(object.name))
       .global.UBRE <<- append(.global.UBRE, .gcv.UBRE(object.name))
   	  .global.sigma2 <<- append(.global.sigma2, .get.sigma2(object.name))
-  	  
+  	  .global.sumcoef <<- cbind(.global.sumcoef, .sumcoef(object.name))
       
       .global.rho <<- cbind(.global.rho, .get.rho(object.name))
       .global.mills <<- cbind(.global.mills, .get.mills(object.name))
@@ -69,6 +71,9 @@ function(libname, pkgname) {
   	  .global.SER <<- cbind(.global.SER, .SER(object.name))
   	  .global.F.stat <<- cbind(.global.F.stat, .F.stat(object.name))
   	  .global.chi.stat <<- cbind(.global.chi.stat, .chi.stat(object.name))
+  	  .global.JB.stat <<- cbind(.global.JB.stat, .JB.stat(object.name))
+  	  .global.LB.stat <<- cbind(.global.LB.stat, .LB.stat(object.name))
+  	  .global.LMARCH.stat <<- cbind(.global.LMARCH.stat, .LMARCH.stat(object.name))
   	  .global.wald.stat <<- cbind(.global.wald.stat, .wald.stat(object.name))
   	  .global.lr.stat <<- cbind(.global.lr.stat, .lr.stat(object.name))
   	  .global.logrank.stat <<- cbind(.global.logrank.stat, .logrank.stat(object.name))
@@ -218,7 +223,7 @@ function(libname, pkgname) {
 
   	model.name <- .get.model.name(object.name)
 
-  	if (!(model.name %in% c("arima","fGARCH","Arima","coeftest","maBina", "lmer", "glmer", "nlmer", "Gls"))) {
+  	if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "coeftest", "maBina", "lmer", "glmer", "nlmer", "Gls"))) {
       if (model.name %in% c("heckit")) {
         return(.summary.object$rSquared$R2adj)
       }
@@ -495,7 +500,7 @@ function(libname, pkgname) {
     }
   
     else if (style=="default") {
-      .format.table.parts <<- c("=!","dependent variable label","dependent variables","models","columns","numbers","objects","-","coefficients","-","omit","-","additional","N","R-squared","adjusted R-squared","max R-squared","log likelihood","sigma2","theta(se)*", "AIC","BIC","UBRE","rho(se)*","Mills(se)*", "SER(df)","F statistic(df)*","chi2(df)*","Wald(df)*","LR(df)*","logrank(df)*","=!","notes")
+      .format.table.parts <<- c("=!","dependent variable label","dependent variables","models","columns","numbers","objects","-","coefficients","-","omit","-","additional","N","R-squared","adjusted R-squared","max R-squared","log likelihood","sigma2","theta(se)*", "AIC","BIC","UBRE","rho(se)*","Mills(se)*", "SER(df)","F statistic(df)*","chi2(df)*","Jarque-Bera(p)","Ljung-Box(p)","LM ARCH(df)(p)","sumcoef","Wald(df)*","LR(df)*","logrank(df)*","=!","notes")
     }
   }
   
@@ -536,6 +541,10 @@ function(libname, pkgname) {
       return(object.name@fit$ics["AIC"])
     }
     
+    if (model.name %in% c("uGARCHfit")) {
+        return(infocriteria(object.name)["Akaike",])
+    }
+
     if (model.name %in% c("maBina")) {
       return(as.vector(object.name$w$aic))
     }
@@ -559,7 +568,7 @@ function(libname, pkgname) {
       model.name <- .get.model.name(object.name)
       
       if (model.name %in% c("coeftest","maBina","Arima")) {
-        return(NA)
+          return(as.vector(BIC(object.name)))
       }
       
       if (model.name %in% c("censReg")) {
@@ -570,6 +579,10 @@ function(libname, pkgname) {
         return(object.name@fit$ics["BIC"])
       }
       
+      if (model.name %in% c("uGARCHfit")) {
+          return(infocriteria(object.name)["Bayes",])
+      }
+
       if (model.name %in% c("lmer","lme","nlme","glmer","nlmer", "ergm", "gls", "Gls")) {
         return(as.vector(BIC(object.name)))
       }
@@ -587,6 +600,165 @@ function(libname, pkgname) {
       return(NA)
     }
   
+  .sumcoef <-
+      function(object.name) {
+          .sumcoef.output <- as.vector(rep(NA,times=2))
+
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              .sumcoef.output <- as.vector(c(sum(object.name$coef[grepl("ar", names(object.name$coef))]),NA))
+          }
+
+          if (model.name %in% c("fGARCH")) {
+              .sumcoef.output <- as.vector(c(sum(object.name@fit$par[grepl("ar", names(object.name@fit$par))]),
+                                            sum(object.name@fit$par[grepl("alpha", names(object.name@fit$par)) | grepl("beta", names(object.name@fit$par))])
+              ))
+          }
+
+          if (model.name %in% c("uGARCHfit")) {
+              .sumcoef.output <- as.vector(c(sum(object.name@fit$coef[grepl("ar", names(object.name@fit$coef))]),
+                                            sum(object.name@fit$coef[grepl("alpha", names(object.name@fit$coef)) | grepl("beta", names(object.name@fit$coef))])
+              ))
+          }
+
+          names(.sumcoef.output) <- c("mean eq","volatility eq")
+          return(cbind(.sumcoef.output))
+      }
+
+  .skewness <-
+      function(object.name) {
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              r.s <- object.name$residuals/sqrt(object.name$sigma2)
+              return(as.vector(skewness(r.s)))
+          }
+          if (model.name %in% c("fGARCH")) {
+              r.s <- object.name@residuals/object.name@sigma.t
+              return(as.vector(skewness(r.s)))
+          }
+          if (model.name %in% c("uGARCHfit")) {
+              r.s <- object.name@fit$residuals/object.name@fit$sigma
+              return(as.vector(skewness(r.s)))
+          }
+
+          return(NA)
+      }
+
+  .kurtosis <-
+      function(object.name) {
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              r.s <- object.name$residuals/sqrt(object.name$sigma2)
+              return(as.vector(kurtosis(r.s)))
+          }
+          if (model.name %in% c("fGARCH")) {
+              r.s <- object.name@residuals/object.name@sigma.t
+              return(as.vector(kurtosis(r.s)))
+          }
+          if (model.name %in% c("uGARCHfit")) {
+              r.s <- object.name@fit$residuals/object.name@fit$sigma
+              return(as.vector(kurtosis(r.s)))
+          }
+
+          return(NA)
+      }
+
+  .JB.stat <-
+      function(object.name) {
+          JB.stat.output <- as.vector(rep(NA,times=3))
+          r.s <- NULL
+
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              r.s <- object.name$residuals/sqrt(object.name$sigma2)
+          }
+
+          if (model.name %in% c("fGARCH")) {
+              r.s <- object.name@residuals/object.name@sigma.t
+          }
+          if (model.name %in% c("uGARCHfit")) {
+              r.s <- object.name@fit$residuals/object.name@fit$sigma
+          }
+
+          if (!is.null(r.s)) {
+              JBt <- jarqueberaTest(r.s)@test
+              JB.stat.output <- as.vector(c(JBt$statistic,2,JBt$p.value))
+          }
+
+          names(JB.stat.output) <- c("statistic","df1","p-value")
+          return(cbind(JB.stat.output))
+      }
+
+  .LB.stat <-
+      function(object.name) {
+          LB.stat.output <- as.vector(rep(NA,times=18))
+
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima","fGARCH","uGARCHfit")) {
+
+              if (model.name %in% c("arima","Arima")) {
+                  r.s <- object.name$residuals/sqrt(object.name$sigma2)
+              }
+              if (model.name %in% c("fGARCH")) {
+                  r.s <- object.name@residuals/object.name@sigma.t
+              }
+              if (model.name %in% c("uGARCHfit")) {
+                  r.s <- object.name@fit$residuals/object.name@fit$sigma
+              }
+
+              bt10 = Box.test(r.s, lag = 10, type = "Ljung-Box")
+              bt15 = Box.test(r.s, lag = 15, type = "Ljung-Box")
+              bt20 = Box.test(r.s, lag = 20, type = "Ljung-Box")
+              LB.stat.output[1:9] <- as.vector(c(bt10$statistic, bt10$parameter, bt10$p.value,
+                                                 bt15$statistic, bt15$parameter, bt15$p.value,
+                                                 bt20$statistic, bt20$parameter, bt20$p.value))
+              bt10 = Box.test(r.s^2, lag = 10, type = "Ljung-Box")
+              bt15 = Box.test(r.s^2, lag = 15, type = "Ljung-Box")
+              bt20 = Box.test(r.s^2, lag = 20, type = "Ljung-Box")
+              LB.stat.output[10:18] <- as.vector(c(bt10$statistic, bt10$parameter, bt10$p.value,
+                                                   bt15$statistic, bt15$parameter, bt15$p.value,
+                                                   bt20$statistic, bt20$parameter, bt20$p.value))
+          }
+
+          names(LB.stat.output) <- rep(c("statistic","df1","p-value"), 6)
+          return(cbind(LB.stat.output))
+      }
+
+  .LMARCH.stat <-
+      function(object.name) {
+          LMARCH.stat.output <- as.vector(rep(NA,times=3))
+          r.s <- NULL
+
+          model.name <- .get.model.name(object.name)
+
+          if (model.name %in% c("arima","Arima")) {
+              r.s <- object.name$residuals/sqrt(object.name$sigma2)
+          }
+          if (model.name %in% c("fGARCH")) {
+              r.s <- object.name@residuals/object.name@sigma.t
+          }
+          if (model.name %in% c("uGARCHfit")) {
+              r.s <- object.name@fit$residuals/object.name@fit$sigma
+          }
+
+          if (!is.null(r.s)) {
+              r.sq <- as.vector(na.exclude(r.s^2))
+              n <- length(r.sq)
+              n.lags <- 12
+              x.mat <- embed(r.sq, n.lags+1)
+              arch.ols <- summary(lm(x.mat[, 1] ~ x.mat[, -1]))
+              LMARCH.stat <- (n-n.lags) * arch.ols$r.squared
+              LMARCH.stat.output <- as.vector(c(LMARCH.stat, n.lags, 1-pchisq(LMARCH.stat, n.lags)))
+          }
+
+          names(LMARCH.stat.output) <- c("statistic","df1","p-value")
+          return(cbind(LMARCH.stat.output))
+      }
 
   .chi.stat <-
   function(object.name) {
@@ -594,7 +766,7 @@ function(libname, pkgname) {
   
     model.name <- .get.model.name(object.name)
   
-    if (!(model.name %in% c("arima","fGARCH","Arima","maBina","coeftest","lmer", "Gls", "glmer", "nlmer", "normal.gam","logit.gam","probit.gam","poisson.gam","gam()"))) {
+    if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina", "coeftest", "lmer", "Gls", "glmer", "nlmer", "normal.gam","logit.gam","probit.gam","poisson.gam","gam()"))) {
       if (!is.null(.summary.object$chi)) {
         chi.value <- suppressMessages(.summary.object$chi)
         df.value <- suppressMessages(.summary.object$df) - suppressMessages(.summary.object$idf)
@@ -890,7 +1062,7 @@ function(libname, pkgname) {
   	else if (model.name %in% c("Arima")) {
   	  return(names(object.name$coef))
   	}
-  	else if (model.name %in% c("fGARCH")) {
+  	else if (model.name %in% c("fGARCH", "uGARCHfit")) {
   	  return(rownames(object.name@fit$matcoef))
   	}
   	else if (model.name %in% c("censReg")) {
@@ -987,6 +1159,9 @@ function(libname, pkgname) {
     }
     if (model.name %in% c("fGARCH")) {
         return(as.character(object.name@call$data))
+    }
+    if (model.name %in% c("uGARCHfit")) {
+        return("y")
     }
     if (model.name %in% c("multinom")) {
       if (!is.null(rownames(.summary.object$coefficients))) {
@@ -1126,7 +1301,7 @@ function(libname, pkgname) {
 
   	model.name <- .get.model.name(object.name)
 
-  	if (!(model.name %in% c("arima","fGARCH", "Arima", "maBina","coeftest", "lmer", "glmer", "nlmer", "Gls"))) {
+    if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina","coeftest", "lmer", "glmer", "nlmer", "Gls"))) {
       if (model.name %in% c("plm")) {
         F.stat.value <- .summary.object$fstatistic$statistic
         df.numerator <- .summary.object$fstatistic$parameter["df1"]
@@ -1154,7 +1329,7 @@ function(libname, pkgname) {
   
     model.name <- .get.model.name(object.name)
   
-    if (!(model.name %in% c("arima","fGARCH", "Arima", "maBina", "coeftest", "lmer", "Gls", "glmer", "nlmer"))) {
+    if (!(model.name %in% c("arima", "Arima", "fGARCH","uGARCHfit", "maBina", "coeftest", "lmer", "Gls", "glmer", "nlmer"))) {
       if (!is.null(object.name$gcv.ubre)) {
         return(as.vector(object.name$gcv.ubre))
       }
@@ -1235,7 +1410,7 @@ function(libname, pkgname) {
     if (model.name %in% c("mnlogit")) {
       return(.summary.object$CoefTable[,4])
     }
-    if (model.name %in% c("fGARCH")) {
+    if (model.name %in% c("fGARCH", "uGARCHfit")) {
       return(object.name@fit$matcoef[,4])
     }
     if (model.name %in% c("lme", "nlme")) {
@@ -1417,7 +1592,7 @@ function(libname, pkgname) {
   
     model.name <- .get.model.name(object.name)
   
-    if (!(model.name %in% c("arima","fGARCH","Arima","maBina", "coeftest", "Gls", "lmer", "glmer", "nlmer"))) {
+    if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina", "coeftest", "Gls", "lmer", "glmer", "nlmer"))) {
       if (!is.null(object.name$scale)) {
         if (model.name %in% c("normal.gee", "logit.gee", "poisson.gee", "probit.gee", "gamma.gee", "gee()", "exp","lognorm","weibull","tobit","survreg()","tobit(AER)")) {
           return(as.vector(object.name$scale))
@@ -1432,7 +1607,7 @@ function(libname, pkgname) {
   
     model.name <- .get.model.name(object.name)
     
-    if (model.name %in% c("arima","fGARCH","maBina", "coeftest", "Gls", "lmer", "glmer", "nlmer")) {
+    if (model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina", "coeftest", "Gls", "lmer", "glmer", "nlmer")) {
       return(NA)
     }
     if (model.name %in% c("lagsarlm", "errorsarlm")) {
@@ -1511,7 +1686,7 @@ function(libname, pkgname) {
   	if (model.name %in% c("mnlogit")) {
   	  return(.summary.object$CoefTable[,2])
   	}
-  	if (model.name %in% c("fGARCH")) {
+  	if (model.name %in% c("fGARCH", "uGARCHfit")) {
   	  return(object.name@fit$matcoef[,2])
   	}
   	if (model.name %in% c("lme", "nlme")) {
@@ -1795,7 +1970,7 @@ function(libname, pkgname) {
   	if (model.name %in% c("mnlogit")) {
   	  return(.summary.object$CoefTable[,3])
   	}
-  	if (model.name %in% c("fGARCH")) {
+  	if (model.name %in% c("fGARCH", "uGARCHfit")) {
   	  return(object.name@fit$matcoef[,3])
   	}
   	if (model.name %in% c("lme", "nlme")) {
@@ -1968,7 +2143,7 @@ function(libname, pkgname) {
   
     model.name <- .get.model.name(object.name)
   
-    if (!(model.name %in% c("arima","fGARCH","Arima","maBina", "coeftest", "Gls", "lmer", "glmer", "nlmer"))) {
+    if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina", "coeftest", "Gls", "lmer", "glmer", "nlmer"))) {
       if ((!is.null(object.name$theta)) && (!is.null(object.name$SE.theta))) {
         theta.value <- object.name$theta
         theta.se.value <- object.name$SE.theta
@@ -2151,6 +2326,9 @@ function(libname, pkgname) {
   	if (model.name %in% c("fGARCH")) {
   	  return(object.name@fit$value)
   	}
+  	if (model.name %in% c("uGARCHfit")) {
+  	    return(-object.name@fit$LLH)
+  	}
   	if (model.name %in% c("mlogit", "mnlogit")) {
   	  return(as.vector(object.name$logLik[1]))
   	}
@@ -2187,7 +2365,7 @@ function(libname, pkgname) {
   
     model.name <- .get.model.name(object.name)
   
-    if (!(model.name %in% c("arima","fGARCH","Arima","maBina", "coeftest", "Gls", "lmer", "glmer", "nlmer"))) {
+    if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina", "coeftest", "Gls", "lmer", "glmer", "nlmer"))) {
       if (!is.null(.summary.object$logtest)) {
         logrank.value <- suppressMessages(.summary.object$sctest[1])
         df.value <- suppressMessages(.summary.object$sctest[2])
@@ -2221,7 +2399,7 @@ function(libname, pkgname) {
       log.p.value <- as.vector(.summary.object$LR1$p.value)
       log.output <- as.vector(c(log.value, df.value, log.p.value))
     }
-    else if (!(model.name %in% c("arima","fGARCH","Arima","maBina","coeftest","Gls","lmer","glmer","nlmer"))) {
+    else if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina","coeftest","Gls","lmer","glmer","nlmer"))) {
       if (!is.null(.summary.object$logtest)) {
         log.value <- suppressMessages(.summary.object$logtest[1])
         df.value <- suppressMessages(.summary.object$logtest[2])
@@ -2240,7 +2418,7 @@ function(libname, pkgname) {
   
     model.name <- .get.model.name(object.name)
   
-    if (!(model.name %in% c("arima","fGARCH","fGARCH","Arima","maBina", "coeftest", "lmer", "glmer", "nlmer", "Gls", "Arima"))) {
+    if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina", "coeftest", "lmer", "glmer", "nlmer", "Gls"))) {
       if (model.name %in% c("coxph", "clogit")) {
         return(as.vector(.summary.object$rsq[2]))
       }
@@ -2255,7 +2433,7 @@ function(libname, pkgname) {
       return("NULL")
     }
     
-    if (class(object.name)[1]=="Arima") {
+    if (class(object.name)[1] %in% c("Arima", "ARIMA")) {
       return("Arima")
     }
     
@@ -2263,6 +2441,10 @@ function(libname, pkgname) {
       return("fGARCH")
     }
     
+    if (class(object.name)[1]=="uGARCHfit") {
+      return("uGARCHfit")
+    }
+
     if (class(object.name)[1]=="censReg") {
       return("censReg")
     }
@@ -2615,7 +2797,7 @@ function(libname, pkgname) {
     if (class(object.name)[1] == "Glm") {
       .summary.object <<- summary.glm(object.name)
     }
-    else if (!(.model.identify(object.name) %in% c("aftreg", "coxreg","phreg","weibreg", "bj", "cph", "Gls", "lrm", "ols", "psm", "Rq"))) {
+    else if (!(.model.identify(object.name) %in% c("aftreg", "coxreg","phreg","weibreg", "bj", "cph", "Gls", "lrm", "ols", "psm", "Rq", "arima", "Arima", "ARIMA", "fGarch", "fGARCH", "uGARCHfit"))) {
       .summary.object <<- summary(object.name)
     }
     else {
@@ -2657,16 +2839,22 @@ function(libname, pkgname) {
     .global.adj.R2 <<- NULL
     .global.AIC <<- NULL
     .global.BIC <<- NULL
+    .global.skewness <<- NULL
+    .global.kurtosis <<- NULL
     .global.scale <<- NULL
     .global.UBRE <<- NULL
     .global.sigma2 <<- NULL
     .global.theta <<- NULL
     .global.rho <<- NULL
     .global.mills <<- NULL
+    .global.sumcoef <<- NULL
     
     .global.SER <<- NULL
     .global.F.stat <<- NULL
     .global.chi.stat <<- NULL
+    .global.JB.stat <<- NULL
+    .global.LB.stat <<- NULL
+    .global.LMARCH.stat <<- NULL
     .global.wald.stat <<- NULL
     .global.lr.stat <<- NULL
     .global.logrank.stat <<- NULL
@@ -2709,9 +2897,12 @@ function(libname, pkgname) {
   	  .global.adj.R2 <<- c(.global.adj.R2, suppressMessages(.adj.r.squared(object.name)))
   	  .global.AIC <<- c(.global.AIC, suppressMessages(.AIC(object.name)))
       .global.BIC <<- c(.global.BIC, suppressMessages(.BIC(object.name)))
+      .global.skewness <<- c(.global.skewness, suppressMessages(.skewness(object.name)))
+      .global.kurtosis <<- c(.global.kurtosis, suppressMessages(.kurtosis(object.name)))
       .global.scale <<- c(.global.scale, suppressMessages(.get.scale(object.name)))
       .global.UBRE <<- c(.global.UBRE, suppressMessages(.gcv.UBRE(object.name)))
   	  .global.sigma2 <<- c(.global.sigma2, suppressMessages(.get.sigma2(object.name)))
+  	  .global.sumcoef <<- cbind(suppressMessages(.sumcoef(object.name)))
       
       .global.rho <<- cbind(suppressMessages(.get.rho(object.name)))
       .global.mills <<- cbind(suppressMessages(.get.mills(object.name)))
@@ -2719,6 +2910,9 @@ function(libname, pkgname) {
   	  .global.SER <<- cbind(suppressMessages(.SER(object.name)))
   	  .global.F.stat <<- cbind(suppressMessages(.F.stat(object.name)))
       .global.chi.stat <<- cbind(suppressMessages(.chi.stat(object.name)))
+      .global.JB.stat <<- cbind(suppressMessages(.JB.stat(object.name)))
+      .global.LB.stat <<- cbind(suppressMessages(.LB.stat(object.name)))
+      .global.LMARCH.stat <<- cbind(suppressMessages(.LMARCH.stat(object.name)))
   	  .global.wald.stat <<- cbind(suppressMessages(.wald.stat(object.name)))
   	  .global.lr.stat <<- cbind(suppressMessages(.lr.stat(object.name)))
   	  .global.logrank.stat <<- cbind(suppressMessages(.logrank.stat(object.name)))
@@ -2734,7 +2928,7 @@ function(libname, pkgname) {
 
   	model.name <- .get.model.name(object.name)
 
-  	if (!(model.name %in% c("arima","fGARCH","Arima","coeftest","Gls","lmer","glmer","nlmer", "ergm"))) {
+  	if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "coeftest","Gls","lmer","glmer","nlmer", "ergm"))) {
   	  if (model.name %in% c("rem.dyad", "mclogit")) {
   	    null.deviance.value <- object.name$null.deviance
   	    null.deviance.output <- as.vector(c(null.deviance.value, NA, NA))
@@ -2775,6 +2969,9 @@ function(libname, pkgname) {
     }
     else if (model.name %in% c("fGARCH")) {
       return(length(object.name@data))
+    }
+    else if (model.name %in% c("uGARCHfit")) {
+      return(length(object.name@model$modeldata$data))
     }
     else if (model.name %in% c("maBina")) {
       return(length(object.name$w$residuals))
@@ -3593,6 +3790,28 @@ function(libname, pkgname) {
   	# residual deviance
   	else if (substr(part,1,nchar("residual deviance"))=="residual deviance") { .print.table.statistic(.global.var.name=.global.residual.deviance, .format.var.name=.format.residual.deviance, part.string=part, part.number=which.part.number) }
 
+  	# Jarque-Bera Normality Test
+  	else if (substr(part,1,nchar("Jarque-Bera"))=="Jarque-Bera") {
+  	    .print.table.statistic(.global.var.name=.global.skewness, .format.var.name=.format.skewness, part.number=which.part.number)
+  	    .print.table.statistic(.global.var.name=.global.kurtosis, .format.var.name=.format.kurtosis, part.number=which.part.number)
+  	    .print.table.statistic(.global.var.name=.global.JB.stat, .format.var.name=.format.JB.stat, part.string=part, part.number=which.part.number)
+  	}
+  	# Ljung-Box Q statistic
+  	else if (substr(part,1,nchar("Ljung-Box"))=="Ljung-Box") {
+  	    for (im in c(1,3,4,6)) {
+  	        tmp.name <- paste(.format.LB.stat," Q(",min(.global.LB.stat[((im-1)*3+1)+1,],na.rm=TRUE),") resid",rep(" sq.",(im-1) %/% 3),"", sep="")
+  	        .print.table.statistic(.global.var.name=.global.LB.stat[((im-1)*3+1):(im*3),], .format.var.name=tmp.name, part.string=part, part.number=which.part.number)
+  	        }
+  	}
+  	# LM ARCH Test
+  	else if (substr(part,1,nchar("LM ARCH"))=="LM ARCH") {
+  	    .print.table.statistic(.global.var.name=.global.LMARCH.stat, .format.var.name=.format.LMARCH.stat, part.string=part, part.number=which.part.number)
+  	}
+
+  	# sum of AR coefficients, sum of ARCH+GARCH coefficients
+  	else if (part=="sumcoef") {
+  	    for (im in 1:2) { .print.table.statistic(.global.var.name=.global.sumcoef[im,], .format.var.name=.format.sumcoef[im], part.string=part, part.number=which.part.number) }
+  	}
   	##
 
   	# single horizontal line, no matter what
@@ -3662,7 +3881,7 @@ function(libname, pkgname) {
 
   	model.name <- .get.model.name(object.name)
 
-  	if (!(model.name %in% c("arima","fGARCH","Arima","maBina","coeftest","nlmer", "glmer", "lmer","Gls","Arima"))) {
+  	if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina", "coeftest", "nlmer", "glmer", "lmer","Gls"))) {
   	  if (model.name %in% c("heckit")) {
   	    return(.summary.object$rSquared$R2)
   	  }
@@ -3731,7 +3950,7 @@ function(libname, pkgname) {
 
   	model.name <- .get.model.name(object.name)
 
-  	if (!(model.name %in% c("arima","fGARCH","Arima","coeftest", "Gls","multinom","lmer","glmer","nlmer"))) {
+  	if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "coeftest", "Gls","multinom","lmer","glmer","nlmer"))) {
       if (model.name %in% c("rem.dyad")) {
         residual.deviance.value <- object.name$residual.deviance
         residual.deviance.output <- as.vector(c(residual.deviance.value, NA, NA))
@@ -3857,7 +4076,7 @@ function(libname, pkgname) {
 
   	model.name <- .get.model.name(object.name)
 
-  	if (!(model.name %in% c("arima","lme","nlme","fGARCH","Arima","maBina","coeftest","lmer","glmer","nlmer","gls","Gls"))) {
+  	if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "lme", "nlme", "maBina", "coeftest", "lmer", "glmer", "nlmer", "gls", "Gls"))) {
       if (model.name %in% c("felm")) {
         SER.output <- as.vector(c(.summary.object$rse, .summary.object$rdf, NA))
       }
@@ -4693,7 +4912,7 @@ function(libname, pkgname) {
   
     model.name <- .get.model.name(object.name)
   
-    if (!(model.name %in% c("arima","fGARCH","Arima","maBina","coeftest", "Gls", "ivreg","lmer","glmer","nlmer"))) {
+    if (!(model.name %in% c("arima", "Arima", "fGARCH", "uGARCHfit", "maBina", "coeftest", "Gls", "ivreg","lmer","glmer","nlmer"))) {
       if (!is.null(.summary.object$waldtest)) {
         wald.value <- suppressMessages(.summary.object$waldtest[1])
         df.value <- suppressMessages(.summary.object$waldtest[2])
@@ -4747,7 +4966,7 @@ function(libname, pkgname) {
   	if (model.name %in% c("mnlogit")) {
   	  return(.summary.object$CoefTable[,1])
   	}
-  	if (model.name %in% c("fGARCH")) {
+  	if (model.name %in% c("fGARCH", "uGARCHfit")) {
   	  return(object.name@fit$matcoef[,1])
   	}
   	if (model.name %in% c("lme","nlme")) {
@@ -4998,7 +5217,9 @@ function(libname, pkgname) {
     latex.replace <- cbind(latex.replace, c("\\nu","nu"), c("\\xi","xi"), c("\\pi","pi"), c("\\varpi","pi"), c("\\rho","rho"), c("\\varrho","rho"), c("\\sigma","sigma"))
     latex.replace <- cbind(latex.replace, c("\\varsigma","sigma"), c("\\tau","tau"), c("\\upsilon","upsilon"), c("\\phi","phi"), c("\\varphi","phi"), c("\\chi","chi"), c("\\psi","psi"))
     latex.replace <- cbind(latex.replace, c("\\omega","omega"), c("\\Gamma","gamma"), c("\\Delta","delta"), c("\\Theta","theta"), c("\\Lambda","lambda"), c("\\Xi","xi"), c("\\Pi","pi"))
-    latex.replace <- cbind(latex.replace, c("\\Sigma","sigma"), c("\\Upsilon","upsilon"), c("\\Phi","phi"), c("\\Psi","psi"), c("\\Omega","omega"))
+    latex.replace <- cbind(latex.replace, c("\\Sigma","sum"), c("\\Upsilon","upsilon"), c("\\Phi","phi"), c("\\Psi","psi"), c("\\Omega","omega"))
+
+    latex.replace <- cbind(latex.replace, c("\\sum","sum"))
     
     s.out <- s
     for (item in 1:ncol(latex.replace)) {
@@ -5978,7 +6199,7 @@ function(libname, pkgname) {
         if (!is.data.frame(objects[[i]])) {
         
           # if zelig$result relevant, identify this automatically
-          if (class(objects[[i]])[1] %in% c("coeftest","lmerMod","glmerMod","nlmerMod","fGARCH")) {  # use this to eliminate lmer, glmer, nlmer
+          if (class(objects[[i]])[1] %in% c("coeftest","lmerMod","glmerMod","nlmerMod","fGARCH", "uGARCHfit")) {  # use this to eliminate lmer, glmer, nlmer
             if (.model.identify(objects[[i]])=="unknown") { error.present <- c(error.present, "% Error: Unrecognized object type.\n",i) }
           }
           else {
@@ -6362,11 +6583,14 @@ function(libname, pkgname) {
     .global.adj.R2 <- NULL
     .global.AIC <- NULL
     .global.BIC <- NULL
+    .global.skewness <- NULL
+    .global.kurtosis <- NULL
     .global.scale <- NULL   # estimated scale parameter (gee)
     .global.UBRE <- NULL    # UBRE score (GAM)
     .global.sigma2 <- NULL  # sigma2 from arima
     .global.theta <- NULL   # theta from negative binomial
     .global.rho <- NULL
+    .global.sumcoef <- NULL
   
     .global.sel.equation <- NULL # selection equation, as opposed to default outcome equation, in heckit and 
     .global.zero.component <- NULL # zero, as opposed to count, component in hurdle and zeroinfl
@@ -6375,6 +6599,9 @@ function(libname, pkgname) {
     .global.SER <- NULL   # residual standard error; standard error of the regression
     .global.F.stat <- NULL # F-statistic for the regression
     .global.chi.stat <- NULL  # chi-squared statistic
+    .global.JB.stat <- NULL  # Jarque-Bera
+    .global.LB.stat <- NULL  # Ljung-Box Q statistic
+    .global.LMARCH.stat <- NULL  # LM ARCH statistic
     .global.wald.stat <- NULL # Wald test statistic (for coxph)
     .global.lr.stat <- NULL  # LR test statistic (for coxph)
     .global.logrank.stat <- NULL # Score (logrank) test (for coxph)
@@ -6423,7 +6650,7 @@ function(libname, pkgname) {
     .format.model.names <- cbind(.format.model.names, c("ei.dynamic","Quinn dynamic","ecological inference"), c("ei.hier","$2 \times 2$ hierarchical","ecological inference"))
     .format.model.names <- cbind(.format.model.names, c("ei.RxC","hierarchical multinominal-Dirichlet","ecological inference"), c("exp","exponential",""), c("ergm","exponential family","random graph"))
     .format.model.names <- cbind(.format.model.names, c("factor.bayes","Bayesian","factor analysis"), c("factor.mix","mixed data","factor analysis"))
-    .format.model.names <- cbind(.format.model.names, c("factor.ord","ordinal data","factor analysis"), c("fGARCH","GARCH",""), c("gamma","gamma",""))
+    .format.model.names <- cbind(.format.model.names, c("factor.ord","ordinal data","factor analysis"), c("fGARCH","GARCH",""), c("uGARCHfit","GARCH",""), c("gamma","gamma",""))
     .format.model.names <- cbind(.format.model.names, c("gamma.gee","gamma generalized","estimating equation"), c("gamma.mixed","mixed effects","gamma"))
     .format.model.names <- cbind(.format.model.names, c("gamma.net","network","gamma"), c("gamma.survey","survey-weighted","gamma"), c("glmrob","robust","GLM"), c("gls","generalized","least squares"))
     .format.model.names <- cbind(.format.model.names, c("gmm","GMM",""), c("rem.dyad", "relational", "event (dyadic)"))
@@ -6544,12 +6771,18 @@ function(libname, pkgname) {
     .format.mills <- "Inverse Mills Ratio"
     .format.AIC <- "Akaike Inf. Crit."
     .format.BIC <- "Bayesian Inf. Crit."
+    .format.skewness <- "skewness"
+    .format.kurtosis <- "excess kurtosis"
     .format.sigma2 <- "$\\sigma^{2}$"
     .format.theta <- "$\\theta$"
+    .format.sumcoef <- c("$\\Sigma \\phi^{}_{i} $","$ \\Sigma (\\alpha^{}_{i}+\\beta^{}_{i})$")
     
     .format.SER <- "Residual Std. Error"
     .format.F.stat <- "F Statistic"
     .format.chi.stat <- "$\\chi^{2}$"
+    .format.JB.stat <- "Jarque-Bera"
+    .format.LB.stat <- ""
+    .format.LMARCH.stat <- "LM ARCH"
     .format.wald.stat <- "Wald Test"
     .format.lr.stat <- "LR Test"
     .format.logrank.stat <- "Score (Logrank) Test"
