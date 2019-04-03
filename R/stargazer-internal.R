@@ -4135,7 +4135,7 @@ function(libname, pkgname) {
     function() {
       if (.format.floating==TRUE) {
         cat("\\begin{", .format.floating.environment,"}[", .format.table.placement,"] \\centering \n",sep="")
-        cat("  \\caption{", .format.title, "} \n",sep="")   
+        if (!(.format.title=="")) { cat("  \\caption{", .format.title, "} \n",sep="") }
         cat("  \\label{", .format.label, "} \n",sep="")
         .set.font.size()
       }
